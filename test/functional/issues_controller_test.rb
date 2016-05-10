@@ -37,7 +37,7 @@ class IssuesControllerTest < ActionController::TestCase
     enabled_module.project_id = 1
     enabled_module.name = 'issue_templates'
     enabled_module.save
-    roles = Role.find(:all)
+    roles = Role.all
     roles.each {|role|
       role.permissions << :show_issue_templates
       role.remove_permission! :edit_issue_templates
@@ -74,5 +74,11 @@ class IssuesControllerTest < ActionController::TestCase
     assert_response :success
     assert_select 'div#template_area select#issue_template'
   end
-  
+
+  # NOTE: When copy, template area should not be displayed.
+  def test_copy
+    get :new, :project_id => 1, :copy_from => 1
+    assert_response :success
+    assert_select 'div#template_area', false
+  end
 end

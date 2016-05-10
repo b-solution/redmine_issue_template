@@ -1,3 +1,9 @@
 source 'https://rubygems.org'
 
-#gem 'byebug'
+group :test do
+  gem "simplecov-rcov"
+  #
+  # TODO: change test not to use shoulda.
+  #
+  gem "shoulda"
+end

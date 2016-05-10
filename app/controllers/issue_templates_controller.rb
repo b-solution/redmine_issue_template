@@ -8,7 +8,7 @@ class IssueTemplatesController < ApplicationController
   before_filter :find_object, :only => [ :show, :edit, :destroy ]
   before_filter :find_user, :find_project, :authorize, 
     :except => [ :preview, :move_order_higher, :move_order_lower, 
-    :move_order_to_top, :move_order_to_bottom, :move ]
+                 :move_order_to_top, :move_order_to_bottom, :move ]
   before_filter :find_tracker, :only => [ :set_pulldown ]
 
   def index
@@ -17,14 +17,14 @@ class IssueTemplatesController < ApplicationController
     @template_map = Hash::new
     tracker_ids.each do |tracker_id|
       templates = IssueTemplate.where('project_id = ? AND tracker_id = ?',
-        @project.id, tracker_id).order('position')
+                                              @project.id, tracker_id).order('position')
       if templates.any?
         @template_map[Tracker.find(tracker_id)] = templates
       end
     end
 
     @issue_templates = IssueTemplate.where('project_id = ?',
-      @project.id).order('position')
+                          @project.id).order('position')
 
     @setting = IssueTemplateSetting.find_or_create(@project.id)
     inherit_template = @setting.enabled_inherit_templates?
@@ -41,9 +41,9 @@ class IssueTemplatesController < ApplicationController
       end
     end
 
-    @globalIssueTemplates = GlobalIssueTemplate.includes(:projects).references(:projects).where("projects.id = ?", @project.id )
+    @globalIssueTemplates = GlobalIssueTemplate.joins(:projects).where(["projects.id = ?", @project.id]).order('position')
 
-    render :template => 'issue_templates/index.html.erb', :layout => !request.xhr?
+    render :layout => !request.xhr?
   end
 
   def show
@@ -51,18 +51,10 @@ class IssueTemplatesController < ApplicationController
 
   def new
     # create empty instance
-    @issue_template = IssueTemplate.new(:author => @user, :project => @project, 
-      :tracker => @tracker)
+    @issue_template ||= IssueTemplate.new(:author => @user, :project => @project)
     if request.post?
-      # Case post, set attributes passed as parameters.
-      @issue_template.safe_attributes = params[:issue_template].permit!
+      @issue_template.safe_attributes = params[:issue_template]
       if @issue_template.save
-        @issue_template.issue_checklist_templates.destroy_all
-        if params[:check_list_items]       
-          for checklist_item in params[:check_list_items]
-            @issue_template.issue_checklist_templates.create(checklist_item)
-          end
-        end
         flash[:notice] = l(:notice_successful_create)
         redirect_to :action => "show", :id => @issue_template.id,
           :project_id => @project
@@ -71,18 +63,10 @@ class IssueTemplatesController < ApplicationController
   end
 
   def edit
-    if request.patch?
-      #params[:issue_template][:issue_checklist_template_attributes] = params[:check_list_items]
-      #params[:issue_template][:issue_checklist_template_attributes] << {:subject => params[:new_checklist]}       
-      @issue_template.safe_attributes = params[:issue_template].permit!
-      if @issue_template.save      
-        @issue_template.issue_checklist_templates.destroy_all
-        if params[:check_list_items]       
-          for checklist_item in params[:check_list_items]
-            @issue_template.issue_checklist_templates.create(checklist_item)
-          end
-        end
-        
+    # Change from request.post to request.patch for Rails4.
+    if request.patch? || request.put?
+      @issue_template.safe_attributes = params[:issue_template]
+      if @issue_template.save
         flash[:notice] = l(:notice_successful_update)
         redirect_to :action => "show", :id => @issue_template.id, 
           :project_id => @project
@@ -106,11 +90,7 @@ class IssueTemplatesController < ApplicationController
     else
       @issue_template = IssueTemplate.find(params[:issue_template])
     end
-    if Redmine::Plugin.installed?(:redmine_issue_checklist)
-      render :text => @issue_template.to_json(:include => :issue_checklist_templates)
-    else
-      render :text => @issue_template.to_json
-    end
+    render :text => @issue_template.to_json(:root => true)
   end
   
   # update pulldown
@@ -123,14 +103,14 @@ class IssueTemplatesController < ApplicationController
 
     project_ids = inherit_template ? @project.ancestors.collect(&:id) : [@project.id]
     issue_templates = IssueTemplate.where('project_id = ? AND tracker_id = ? AND enabled = ?',
-      @project.id, @tracker.id, true).order('position')
+                                          @project.id, @tracker.id, true).order('position')
 
     project_default_template = IssueTemplate.where('project_id = ? AND tracker_id = ? AND enabled = ?
                                      AND is_default = ?',
-      @project.id, @tracker.id, true, true).first
+                                                  @project.id, @tracker.id, true, true).first
 
     unless project_default_template.blank?
-      @default_template = project_default_template
+       @default_template = project_default_template
     end
 
     if issue_templates.size > 0
@@ -141,8 +121,8 @@ class IssueTemplatesController < ApplicationController
       inherit_templates = []
 
       # keep ordering of project tree
-      # TODO: Add Test code.
-      project_ids.each do |i|
+       # TODO: Add Test code.
+       project_ids.each do |i|
         inherit_templates.concat(IssueTemplate.where('project_id = ? AND tracker_id = ? AND enabled = ?
           AND enabled_sharing = ?', i, @tracker.id, true, true).order('position'))
       end
@@ -151,7 +131,7 @@ class IssueTemplatesController < ApplicationController
         inherit_templates.each do |x|
           group.push([x.title, x.id, {:class => "inherited"}])
           if x.is_default == true
-            if project_default_template.blank?
+             if project_default_template.blank?
               @default_template = x
             end
           end
@@ -159,7 +139,10 @@ class IssueTemplatesController < ApplicationController
       end
     end
 
-    @globalIssueTemplates = GlobalIssueTemplate.includes(:projects).references(:projects).where(" tracker_id = ? AND projects.id = ?", @tracker.id, @project.id)
+    @globalIssueTemplates = GlobalIssueTemplate.joins(:projects).where(["tracker_id = ? AND projects.id = ?",
+                                                                        @tracker.id, @project.id]).order('position')
+
+
     if @globalIssueTemplates.any?
       @globalIssueTemplates.each do |x|
         group.push([x.title, x.id, {:class => "global"}])
@@ -182,7 +165,7 @@ class IssueTemplatesController < ApplicationController
     @issue_template = IssueTemplate.find(params[:id]) if params[:id]
     render :partial => 'common/preview'
   end
-  
+
   # Reorder templates
   def move
     move_order(params[:to])

@@ -13,8 +13,15 @@ class GlobalIssueTemplatesController < ApplicationController
   #
   def index
     @trackers = Tracker.all
-    @global_issue_templates = GlobalIssueTemplate.all
-    render :template => 'global_issue_templates/index.html.erb', :layout => !request.xhr?
+    @template_map = Hash::new
+    @trackers.each do |tracker|
+      templates = GlobalIssueTemplate.where('tracker_id = ?',
+                                      tracker.id).order('position')
+      if templates.any?
+        @template_map[Tracker.find(tracker.id)] = templates
+      end
+    end
+    render :layout => !request.xhr?
   end
 
   def new
@@ -22,17 +29,11 @@ class GlobalIssueTemplatesController < ApplicationController
     @trackers = Tracker.all
     @projects = Project.all
     @global_issue_template = GlobalIssueTemplate.new(:author => @user,
-      :tracker => @tracker)
+                                        :tracker => @tracker)
     if request.post?
       # Case post, set attributes passed as parameters.
-      @global_issue_template.safe_attributes = params[:global_issue_template].permit!
+      @global_issue_template.safe_attributes = params[:global_issue_template]
       if @global_issue_template.save
-        @global_issue_template.issue_checklist_templates.destroy_all                
-        if params[:check_list_items]       
-          for checklist_item in params[:check_list_items]
-            @global_issue_template.issue_checklist_templates.create(checklist_item)
-          end
-        end
         flash[:notice] = l(:notice_successful_create)
         redirect_to :action => "show", :id => @global_issue_template.id
       end
@@ -41,20 +42,14 @@ class GlobalIssueTemplatesController < ApplicationController
 
   def show
     @projects = Project.all
-    
   end
 
   def edit
     @projects = Project.all
-    if request.patch?
-      @global_issue_template.safe_attributes = params[:global_issue_template].permit!
+    # Change from request.post to request.patch for Rails4.
+    if request.patch? || request.put?
+      @global_issue_template.safe_attributes = params[:global_issue_template]
       if @global_issue_template.save
-        @global_issue_template.issue_checklist_templates.destroy_all 
-        if params[:check_list_items]       
-          for checklist_item in params[:check_list_items]
-            @global_issue_template.issue_checklist_templates.create(checklist_item)
-          end
-        end
         flash[:notice] = l(:notice_successful_update)
         redirect_to :action => "show", :id => @global_issue_template.id
 
@@ -82,7 +77,13 @@ class GlobalIssueTemplatesController < ApplicationController
     render :partial => 'common/preview'
   end
 
+  def move
+    move_order(params[:to])
+  end
+
   private
+
+  # Reorder templates
   def find_user
     @user = User.current
   end
@@ -92,5 +93,13 @@ class GlobalIssueTemplatesController < ApplicationController
     @global_issue_template = GlobalIssueTemplate.find(params[:id])
   rescue ActiveRecord::RecordNotFound
     render_404
+  end
+
+  def move_order(method)
+    GlobalIssueTemplate.find(params[:id]).send "move_#{method}"
+    respond_to do |format|
+      format.html { redirect_to :action => 'index' }
+      format.xml  { head :ok }
+    end
   end
 end
