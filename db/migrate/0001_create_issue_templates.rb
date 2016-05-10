@@ -1,6 +1,6 @@
 class CreateIssueTemplates < ActiveRecord::Migration
   def self.up
-    drop_table :issue_templates
+    # drop_table :issue_templates
     create_table :issue_templates do |t|
       t.column :title, :string, :null => false
       t.column :project_id, :integer
